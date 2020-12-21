@@ -12,7 +12,7 @@ import java.util.function.Function;
 
 public abstract class Language {
     public Lexer tokensConverter = new Lexer();
-    public JavaTranslatorBase translatorBase = new JavaTranslatorBase();
+    public IBaseTrans translatorBase;
     public HashMap<String, Function<Instruction,String>> MiniTrans = new HashMap<>();
 
     public void registerReader(IReadable reader) {
@@ -24,8 +24,7 @@ public abstract class Language {
 
     public BaseLanguage getTreeFromString(String src){
         var tokens = tokensConverter.tokenize(src);
-        var tree = translatorBase.translate(tokens);
-        return tree;
+        return translatorBase.translate(tokens);
     }
 
     public abstract String getTokensFromTree(BaseLanguage tree);

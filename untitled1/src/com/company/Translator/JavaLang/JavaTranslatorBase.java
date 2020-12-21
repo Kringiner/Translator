@@ -4,16 +4,28 @@ import com.company.Lexer.Token;
 import com.company.Translator.BaseLang.BaseLanguage;
 import com.company.Translator.BaseLang.Instruction;
 import com.company.Translator.BaseLang.Instructions.*;
+import com.company.Translator.IBaseTrans;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 
-public class JavaTranslatorBase {
+public class JavaTranslatorBase extends IBaseTrans {
     private BaseLanguage baseLang = new BaseLanguage();
-    private int tab = 0;
-
-
+    private ForInstruction MakeForFromBody(ArrayList<Instruction> forBody){
+        if(forBody.size() != 3) return null;
+        var var = ((Initialization) forBody.get(0)).var.var;
+        var from = ((LiteralInstruction) (((Initialization) forBody.get(0))).value).value;
+        String to;
+        if ("<".equals(((ConditionalInstruction) forBody.get(1)).type)) {
+            to = (((LiteralInstruction) (((ConditionalInstruction) forBody.get(1))).right).value);
+            to = (Integer.parseInt(to) - 1) + "";
+        } else {
+            return null;
+        }
+        var step = ((LiteralInstruction) (((MathInstruction) forBody.get(2))).right).value;
+        return new ForInstruction(from, to, var,step);
+    }
 
     public ArrayList<Instruction> ReadInstruction(Token[] tokens) {
         var inst = new ArrayList<Instruction>();
@@ -21,12 +33,6 @@ public class JavaTranslatorBase {
         var i = 0;
         while (i < tokens.length) {
             switch (tokens[i].getType()) {
-                case "FigBracket":
-                    if (tokens[i].getText().equals("{")) {
-                        tab++;
-                    } else tab--;
-                    i++;
-                    break;
                 case "Type":
                     if (tokens[i + 1].getType().equals("Variable")) {
                         baseLang.vars.put(tokens[i + 1].getText(), tokens[i].getText());
@@ -39,7 +45,8 @@ public class JavaTranslatorBase {
                             var body = Arrays.copyOfRange(tokens, start, i + 1);
                             var exp = ReadInstruction(body);
                             if (exp == null) return null;
-                            inst.add(new Initialization(new VarInstruction(varName), exp.get(0)));
+                            var ini = new Initialization(new VarInstruction(varName), exp.get(0), "int");
+                            inst.add(ini);
                             i++;
                         }
                     }
@@ -59,20 +66,26 @@ public class JavaTranslatorBase {
                     var forBody = ReadInstruction(Arrays.copyOfRange(tokens, start, i + 1));
                     if (forBody == null) return null;
                     i++;
-                    var name = ((VarInstruction) (((Initialization) forBody.get(0))).var).var;
-                    var from = ((LiteralInstruction) (((Initialization) forBody.get(0))).value).value;
-                    var to = (((LiteralInstruction) (((ConditionalInstruction) forBody.get(1))).right).value);
-                    to = (Integer.parseInt(to) - 1) + "";
-                    var step = ((LiteralInstruction) (((MathInstruction) forBody.get(2))).right).value;
-                    if (tokens[i + 1].getType() == "FigBracket") {
+                    var forInst = MakeForFromBody(forBody);
+                    if( forInst == null ) return null;
+                    if (tokens[i + 1].getType().equals("FigBracket")) {
                         i += 2;
                     } else {
                         return null;
                     }
                     start = i;
-                    while (!tokens[i + 1].getType().equals("FigBracket")) i++;
-                    var instr = ReadInstruction(Arrays.copyOfRange(tokens, start, i + 1));
-                    var forInst = new ForInstruction(from, to, name, step);
+                    var skip = 0;
+                    while (i < tokens.length && !tokens[i + 1].getText().equals("}")) {
+                        i++;
+                        if(tokens[i].getText().equals("{")) {
+                            skip++;
+                        }
+                        if(i + 1< tokens.length && tokens[i+1].getText().equals("}") && skip > 0) {
+                            i++;
+                            skip--;
+                        }
+                    }
+                    var instr = ReadInstruction(Arrays.copyOfRange(tokens, start, i + 2));
                     forInst.Children = instr;
                     inst.add(forInst);
                     i++;
@@ -100,7 +113,6 @@ public class JavaTranslatorBase {
                             i = i + 2;
                             start = i;
                             while (!tokens[i + 1].getType().equals("SemilCom")) i++;
-                            var b = Arrays.copyOfRange(tokens, start, i + 1);
                             var condition = ReadInstruction(Arrays.copyOfRange(tokens, start, i + 2));
                             i++;
                             inst.add(new ConditionalInstruction(con, new VarInstruction(varCon), condition.get(0)));
@@ -144,6 +156,7 @@ public class JavaTranslatorBase {
         return inst;
     }
 
+    @Override
     public BaseLanguage translate(@NotNull Token[] tokenAr) {
         var tokens = Arrays.stream(tokenAr).filter(x -> !x.getType().equals("WhiteSpace")).toArray(Token[]::new);
         var i = 0;
